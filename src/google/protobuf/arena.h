@@ -270,7 +270,9 @@ class PROTOBUF_EXPORT PROTOBUF_ALIGNAS(8) Arena final {
   // if the object were allocated on the heap (except that the underlying memory
   // is obtained from the arena).
   template <typename T, typename... Args>
-  PROTOBUF_NDEBUG_INLINE static T* Create(Arena* arena, Args&&... args) {
+  PROTOBUF_NDEBUG_INLINE static std::enable_if_t<
+      !internal::cleanup::IsString<T>(), T*>
+  Create(Arena* arena, Args&&... args) {
     if (PROTOBUF_PREDICT_FALSE(arena == nullptr)) {
       return new T(std::forward<Args>(args)...);
     }
@@ -279,6 +281,15 @@ class PROTOBUF_EXPORT PROTOBUF_ALIGNAS(8) Arena final {
                                    T>::destructor;
     return new (arena->AllocateInternal(sizeof(T), alignof(T), destructor))
         T(std::forward<Args>(args)...);
+  }
+  template <typename T, typename... Args>
+  PROTOBUF_NDEBUG_INLINE static std::enable_if_t<
+      internal::cleanup::IsString<T>(), T*>
+  Create(Arena* arena, Args&&... args) {
+    if (arena == nullptr) {
+      return new T(std::forward<Args>(args)...);
+    }
+    return new (arena->AllocateString()) T(std::forward<Args>(args)...);
   }
 
   // API to delete any objects not on an arena.  This can be used to safely
@@ -672,6 +683,7 @@ class PROTOBUF_EXPORT PROTOBUF_ALIGNAS(8) Arena final {
   void* AllocateForArray(size_t n);
   void* AllocateAlignedWithCleanup(size_t n, size_t align,
                                    void (*destructor)(void*));
+  void* AllocateString();
 
   template <typename Type>
   friend class internal::GenericTypeHandler;
